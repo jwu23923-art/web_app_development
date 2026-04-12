@@ -1,84 +1,75 @@
-# 系統流程圖：線上算命系統
+# 系統流程圖：個人食譜收藏夾 (Personal Recipe Collection)
 
-本文件根據產品需求文件 (PRD) 與系統架構文件 (ARCHITECTURE)，繪製線上算命系統的使用者流程與系統資料流。
+本文件描述使用者在「個人食譜收藏夾」中的操作路徑，以及資料在前端與後端系統間的流轉流程。
 
-## 1. 使用者流程圖（User Flow）
+## 1. 使用者流程圖 (User Flow)
 
-此流程圖描述使用者進入網站後，可以進行的各種操作路徑，包含抽籤互動、會員登入與後續如捐款、儲存等動作。
+此圖展示使用者從進入網站到管理食譜的完整生命週期。主要包含：瀏覽列表、新增食譜、查看詳情、編輯與刪除等核心動作。
 
 ```mermaid
 flowchart LR
-    A([使用者造訪首頁]) --> B[首頁 / 導覽]
-    B --> C{選擇系統功能}
+    Start([使用者開啟網頁]) --> Home[首頁：食譜清單]
     
-    %% 算命抽籤主流程
-    C -->|1. 開始抽籤/算命| D[前端互動動畫（擲筊/搖籤筒）]
-    D --> E[顯示算命與抽籤結果]
+    Home --> Action{要執行什麼操作？}
     
-    %% 抽籤結果後的後續動作
-    E --> F{觀看結果後...}
-    F -->|分享結果| K[呼叫社群分享 (FB/Line)]
-    F -->|儲存紀錄| G{是否已登入？}
+    %% 新增流程
+    Action -->|點擊新增| AddForm[填寫食譜表單]
+    AddForm --> AddSave[點擊儲存]
+    AddSave --> Home
     
-    G -->|未登入| I[導向登入/註冊頁面]
-    I -->|登入成功| H
-    G -->|已登入| H[將紀錄存入個人帳號]
-    H --> J[個人歷史紀錄頁面]
+    %% 查看與管理
+    Action -->|點擊食譜標題| Detail[食譜詳情頁]
+    Detail --> Manage{管理動作}
     
-    %% 其他功能
-    C -->|2. 查看歷史紀錄| G
-    C -->|3. 捐獻香油錢| L[捐獻頁面 (顯示轉帳/金流)]
-    F -->|點擊香油錢| L
+    Manage -->|編輯| EditForm[編輯食譜表單]
+    EditForm --> EditSave[點擊更新]
+    EditSave --> Detail
+    
+    Manage -->|刪除| DeletePop[確認刪除視窗]
+    DeletePop -->|確認| DeleteConfirm[執行刪除]
+    DeleteConfirm --> Home
+    DeletePop -->|取消| Detail
+    
+    %% 篩選流程
+    Action -->|選擇分類標籤| Filter[過濾清單]
+    Filter --> Home
 ```
 
-## 2. 系統序列圖（Sequence Diagram）
+## 2. 系統序列圖 (Sequence Diagram)
 
-此序列圖描述核心情境：「**使用者進行抽籤並儲存結果**」的完整系統流轉過程。
+此序列圖描述以「**新增一個新食譜**」為例的系統運作細節，涵蓋從前端輸入到後端資料庫存取的過程。
 
 ```mermaid
 sequenceDiagram
     actor User as 使用者
-    participant Browser as 瀏覽器 (JS/HTML)
-    participant Route as Flask Route (Controller)
-    participant Model as Database Model 
-    participant DB as SQLite
+    participant Browser as 瀏覽器 (HTML/JS)
+    participant Flask as Flask Route (Controller)
+    participant Model as Database Model
+    participant DB as SQLite 資料庫
 
-    User->>Browser: 1. 點擊「開始抽籤」
-    Browser->>Browser: 2. 播放抽籤動畫 (不消耗伺服器資源)
-    Browser->>Route: 3. POST /draw (獲取抽籤結果)
-    Route->>Model: 4. 隨機讀取籤詩庫
-    Model-->>Route: 5. 回傳對應的籤詩資料
-    Route-->>Browser: 6. 回傳結果頁面 (Jinja2 HTML)
-
-    User->>Browser: 7. 點擊「儲存紀錄」
-    Browser->>Route: 8. POST /record/save
-    Route->>Route: 9. 檢查 Session 確認登入狀態
-    
-    alt 如果使用者尚未登入
-        Route-->>Browser: 10a. HTTP 302 導向至 /login
-        User->>Browser: 11a. 填寫帳密登入並自動回源
-    end
-
-    Route->>Model: 10b. 呼叫寫入算命紀錄函式
-    Model->>DB: 11b. INSERT INTO records (user_id, result)
-    DB-->>Model: 12. 寫入成功
-    Model-->>Route: 13. 回傳成功狀態
-    Route-->>Browser: 14. HTTP 302 導向至 /history
-    Browser->>User: 15. 顯示歷史紀錄列表
+    User->>Browser: 1. 填寫食譜名稱、食材、步驟與分類
+    User->>Browser: 2. 點擊「儲存食譜」
+    Browser->>Flask: 3. POST /recipe/new (傳送表單資料)
+    Note over Flask: 驗證資料是否完整
+    Flask->>Model: 4. 呼叫食譜新增函式 (add_recipe)
+    Model->>DB: 5. INSERT INTO recipes (name, ingredients, steps, category)
+    DB-->>Model: 6. 寫入成功
+    Model-->>Flask: 7. 回傳新食譜 ID
+    Flask-->>Browser: 8. HTTP 302 Redirect to / (重導向回首頁)
+    Browser->>User: 9. 顯示更新後的食譜列表
 ```
 
 ## 3. 功能清單與路由對照表
 
-以下整理了系統內所有的主要功能，並對應到具體的 HTTP 方法、URL 路徑，與將被渲染的 Jinja2 模板檔，以利後續的 `/api-design` 與路由開發。
+以下為本專案的核心路由規劃，將作為後續開發路由 (`/api-design`) 的依據。
 
-| 功能名稱 | 功能說明 | URL 路徑 | HTTP 方法 | 對應視圖 (Jinja2 / Controller 行為) |
-|----------|------|----------|-----------|------------------|
-| **網站首頁** | 顯示系統導覽與開始算命按鈕 | `/` | GET | `index.html` |
-| **會員註冊** | 填寫表單建立新使用者 | `/register` | GET, POST | `auth/register.html` |
-| **會員登入** | 登入並寫入 Session | `/login` | GET, POST | `auth/login.html` |
-| **會員登出** | 清除 Session 狀態 | `/logout` | GET | 無 (直接導回到首頁 `/`) |
-| **執行抽籤** | 送出抽籤請求獲取隨機結果 | `/draw` | POST | 核心邏輯處理後導向 `/result/<id>` |
-| **顯示結果** | 呈現籤詩或算命的詳細內容 | `/result/<id>` | GET | `result.html` |
-| **儲存結果** | 將當下這筆紀錄綁定使用者帳號 | `/record/save` | POST | 無 (直接導向至 `/history`) |
-| **歷史紀錄** | 列出自己過去儲存的算命結果 | `/history` | GET | `history.html` |
-| **捐香油錢** | 顯示線上捐款或轉帳資訊頁面 | `/donate` | GET, POST | `donate.html` |
+| 功能名稱 | URL 路徑 | HTTP 方法 | 金字塔模板 (Jinja2) | 說明 |
+|----------|----------|-----------|--------------------|------|
+| **食譜首頁** | `/` | GET | `index.html` | 顯示所有食譜，支援分類顯示 |
+| **新增食譜頁** | `/recipe/new` | GET | `recipe_form.html` | 顯示空白表單供填寫 |
+| **執行新增** | `/recipe/new` | POST | 無 (導向 `/`) | 接收資料並存入資料庫 |
+| **食譜詳情頁** | `/recipe/<id>` | GET | `detail.html` | 顯示單一食譜的詳細做法 |
+| **編輯食譜頁** | `/recipe/<id>/edit` | GET | `recipe_form.html` | 顯示帶有舊資料的表單 |
+| **執行更新** | `/recipe/<id>/edit` | POST | 無 (導向 `/recipe/<id>`) | 更新資料庫紀錄 |
+| **執行刪除** | `/recipe/<id>/delete`| POST | 無 (導向 `/`) | 刪除資料庫紀錄 |
+| **分類篩選** | `/search` | GET | `index.html` | 根據 URL 參數 `category` 進行篩選 |
